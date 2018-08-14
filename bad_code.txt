@@ -1,0 +1,56 @@
+-------------------
+found in imonggo-rewrite: document.rb
+
+  def is_supplier_transaction?
+    return (self.document_type_id == 1 || self.document_type_id == 2) ? true : false
+  end
+
+  def is_branch_transaction?
+    return (self.document_type_id == 4) ? true : false
+  end
+
+  def is_physical_count?
+    return (self.document_type_id == 7) ? true : false
+  end
+
+  def is_adjustment_transaction?
+    return (self.document_type_id == 5 || self.document_type_id == 6) ? true : false
+  end
+
+rewritten to
+
+what is wrong with this?
+code is dependent on primary keys of document types not to change! It assumes every database
+this will run on, document types will have the same ids
+Also, it is not readable. 
+
+ -------------------
+found in document.rb
+frequent use of ids as static fields
+self.document_type_id == 4
+
+What is wrong with this? The next developer reading this code (e.g. ME! I was a victim of this) will have
+to keep looking up what is document_type with id 4? Pull up database and queries. Slows down development time!
+
+Fix:
+self.document_type.code == 'release_supplier'
+Isn't this a lot easier to understand?
+ -------------------
+
+found in imonggo-rewrite: invoice.rb
+
+	def customer
+		Customer.find(self.customer_id).name if !self.customer_id.nil?
+	end
+
+	def customer_object
+		Customer.find(self.customer_id) if !self.customer_id.nil?
+	end
+
+	Developer made this work around to avoid rails requirement of belongs_to as a required field.
+	Whats wrong with this? Customer has no relation to invoice! 
+
+	Fix:
+	belongs_to :customer, optional: true
+-------------------
+
