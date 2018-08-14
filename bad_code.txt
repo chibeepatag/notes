@@ -54,3 +54,26 @@ found in imonggo-rewrite: invoice.rb
 	belongs_to :customer, optional: true
 -------------------
 
+found in documents.js
+
+//opens document from index db and wipe out old document lines instead of just updating the document line that changed
+		for (i = 0; i < lines.length; i++) {
+			var line = lines[i];
+			if(line["product_id"] == product_id){
+				update_line = {"product_id": product_id, "price": prc, "discount_text": dsc, "quantity": qty, "subtotal": new_total, "label": line["label"], "line_no": line["line_no"]};
+			} else {
+				update_line = {"product_id": line["product_id"], "price": line["price"], "discount_text": line["discount_text"], "quantity": line["quantity"], "subtotal": line["subtotal"], "label": line["label"], "line_no": line["line_no"]};
+			}
+			document_lines.push(update_line);
+		}
+		
+		openDocument.document_lines = document_lines;
+		documentObjectStore.put(openDocument);
+		
+	};
+Fix:
+documents.js was overhauled to use js promises and create functions for CRUD operations
+find the line that changed and update only that.
+
+even better fix would be for invoice_lines to have its own table and index.
+-------------------
