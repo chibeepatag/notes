@@ -77,3 +77,340 @@ find the line that changed and update only that.
 
 even better fix would be for invoice_lines to have its own table and index.
 -------------------
+
+boiler plate code not cleaned up!
+Found in store new.html.erb
+<!-- <a href="#demo" data-toggle="collapse">Collapsible</a>
+
+							<div id="demo" class="collapse">
+							Lorem ipsum dolor text....
+							</div> -->
+
+_sample_partial.html.erb
+
+sample - table was created and carried over to production
+
+Fix:
+Just remove it!
+
+-------------------
+not putting limits in migration files
+strings default to varchar 255! what a waste of space!
+peppered all over migration files are "t.string :status" with no limits set
+varchar 255 for one character field!
+
+-------------------
+store.js
+
+Why replace the invoice line with the same data?!?!
+just update the invoice line!
+	function updateInvLinesInDB( line_no, product_id, prc, base_prc, dsc, discount_amount, qty, new_total, invoice_line_taxes){
+		console.log(invoice_line_taxes);
+		var invoiceTransaction = database.transaction(["invoices"], "readwrite");
+		var invoiceObjectStore = invoiceTransaction.objectStore("invoices");
+		var statusIndex = invoiceObjectStore.index("status_index");
+		var checkOpenInvoice = statusIndex.get("N");
+
+		checkOpenInvoice.onsuccess = function ( event ) {
+			var openInvoice = event.target.result;
+			var lines = openInvoice.invoice_lines;
+			var invoice_lines = [], update_line ;
+
+			for (i = 0; i < lines.length; i++) {
+				var line = lines[i];
+				if(line["line_no"] == line_no){
+					update_line = {line_no: line_no, product_id: product_id, retail_price: prc, discount_text: dsc, discount_amount: setDecimalPlaces(discount_amount), quantity: qty, subtotal: setDecimalPlaces(new_total), name: line["name"], stock_no: line["stock_no"], taxes: invoice_line_taxes, orig_price: setDecimalPlaces(base_prc), notes: line["notes"],allow_price_change: line["allow_price_change"], allow_discount: line["allow_discount"], is_serializable: line["is_serializable"]}
+				} else {
+					update_line = {line_no: line["line_no"],product_id: line["product_id"], retail_price: line["retail_price"], discount_text: line["discount_text"], discount_amount: setDecimalPlaces(line["discount_amount"]) , quantity: line["quantity"], subtotal: setDecimalPlaces(line["subtotal"]), name: line["name"], stock_no: line["stock_no"], taxes: line["taxes"], orig_price: setDecimalPlaces(line["orig_price"]), notes: line["notes"], allow_price_change: line["allow_price_change"], allow_discount: line["allow_discount"], is_serializable: line["is_serializable"]}
+				}
+				invoice_lines.push(update_line);
+			}
+			openInvoice.invoice_lines = invoice_lines;
+			var updateInvoice = invoiceObjectStore.put(openInvoice);
+			updateInvoice.onsuccess = function ( event ){
+				console.log("Should recompute");
+				computeTotals(openInvoice);
+			}
+
+		};
+	}
+
+
+
+----------------------
+store.js
+
+Uncleaned log console.log("::I am here::");
+
+If you intend to leave the log, make it more descriptive. e.g. name of function, what you are checking
+
+
+
+-----------------------
+store.js
+
+	$('body').on("change",'.inv-qty', function( event ){
+			console.log("Change in qty.. recompute");
+			var value = $(this).data('product');
+
+			invoice_type = sessionStorage.getItem("invoice_type");
+			if(invoice_type == 'R'){
+				product_hash = JSON.parse(sessionStorage.getItem("product_hash"));
+				max_qty = parseFloat(product_hash[value]);
+				NEW_QTY = parseFloat($(this).val());
+				if(max_qty >= NEW_QTY){
+					var line_no = $(this).data('line');
+					displayQuantity();
+					reComputeLineTotal(value, line_no);
+				} else {
+					alertify.error("Quantity should be less or equal to " + max_qty);
+				}
+			} else {
+				NEW_QTY = $(this).val();
+				var line_no = $(this).data('line');
+
+				if ($.isNumeric(NEW_QTY)) {
+					if ((parseFloat(NEW_QTY) >= 0 || NEW_QTY == "") && (parseFloat(NEW_QTY) <= 900000000) ){
+						reComputeLineTotal(value, line_no);
+						displayQuantity();
+					}
+					else
+						alertify.error('Invalid quantity.');
+				} else {
+					alertify.error('Invalid quantity.');
+				}
+			}
+		});
+
+using non descriptive variable names
+var value = $(this).data('product');
+what is value here? upon tracing in html value is the stock_no.
+I would have saved me 2 minutes if the variable was just named stock_no
+
+
+both forks end in 
+displayQuantity() and recompute ----> remove from if else
+too many repeated lines onf alertify Invalid quanity
+
+
+-----------------------
+store.js
+brain explosion:
+if ( product.allow_decimal_quantities == true || ( product.allow_decimal_quantities == false && qty_with_decimal) ||   product.allow_decimal_quantities == null ){
+
+why is there validation code  specific to quantities in reCompute! tapos na dapat ang validation
+also my brain exploded with the logic here
+
+fix
+place if with other validations: function validateInvoiceLineQuantity....
+
+			var qty_with_decimal = (qty % 1 == 0);
+			if(!product.allow_decimal_quantities && qty_with_decimal){
+				alertify.error("Decimal quantities not allowed for this product.")
+			}
+
+-----------------------
+store.js
+
+why validate the input in reCompute?
+
+better to make a function for each task. easier to read! the name of the function
+documents what you are trying to do!
+
+----------------------
+store.js
+
+var taxType = localStorage.getItem("tax_type");
+
+if(taxType == "1"){
+//....
+}
+what does taxType == "1" mean?
+
+fix:
+var single_tax = taxType == "1"
+if(single_tax){
+//....
+}
+
+----------------------
+store.js
+
+data is everywhere!
+inline html data attributes, indexedDb, sessionStorage
+
+data can easily get out of sync
+----------------------
+store.js
+
+function generateApiJSON( invoice, tendered, type ){
+		if (type == 'N'){
+			invoice_type = sessionStorage.getItem("invoice_type");
+	        // dummy_reference = "1-" + (Date.now()).toString() ;
+				var jsonStr = "";
+			    jsonStr += '{"invoice":{';
+			    jsonStr += '"remarks": "' + $('textarea[name="document[remarks]"]').val() + '",';
+
+			    if(localStorage.getItem("enable_track_salesman") == "1"){
+			    	jsonStr += '"salesperson_id": "' + invoice.salesman.id + '",';
+			    }
+
+				if (invoice_type == 'N')
+					jsonStr += 		'"invoice_type_id": "N",';
+				else if (invoice_type == 'L')
+					jsonStr += 		'"invoice_type_id": "L",';
+			  else{
+			    if( invoice.invoice_type == "N")
+			    	jsonStr += 		'"invoice_type_id": "N",';
+			    else
+			   		jsonStr += 		'"invoice_type_id": "R",';
+					// jsonStr += 		'"return_reason": "' + invoice.return_reason + '",';
+			   }
+
+				if ( $('#email_invoice').is(':checked') )
+					jsonStr += 		'"email_invoice": "' + $('#checkout_customer_email').val() + '",';
+				else
+					jsonStr += 		'"email_invoice": ' + null + ',';
+
+				branch_id = invoice.branch_id;
+				if(branch_id == null){
+					branch_id = localStorage.getItem("current_branch_id");
+				}
+				jsonStr += 		'"branch_id": ' + branch_id + ",";
+			  jsonStr += 		'"tax_inclusive": ' + localStorage.getItem("tax_inclusive") + ",";
+			 	jsonStr += 		'"reference": "' + invoice.reference + '",';
+				jsonStr += 		'"invoice_date":' + Date.now() + ',';
+
+				if(invoice.salesman != null || invoice.salesman != undefined){
+					jsonStr +=		'"user_id":' + invoice.salesman.id + ',';
+				}
+
+				if(invoice.customer != null || invoice.customer != undefined){
+					if (invoice.customer.customer_id != undefined && invoice.customer.customer_id.toString().startsWith("X-") == false  )
+						jsonStr += 		'"customer_id":'+ invoice.customer.customer_id + ',';
+					else{
+						jsonStr += 		'"customer": {';
+						jsonStr +=			'"first_name": "' + invoice.customer.first_name + '",';
+						jsonStr +=			'"last_name": "' + invoice.customer.last_name + '",';
+						jsonStr +=			'"telephone": "' + invoice.customer.telephone + '",';
+						jsonStr +=			'"mobile": "' + invoice.customer.mobile + '",';
+						jsonStr +=			'"email": "' + invoice.customer.email + '"';
+						jsonStr +=		'},';
+					}
+				}
+
+			    lines = invoice.invoice_lines;
+
+				jsonStr += 		'"invoice_lines": ['
+					for (var i=0; i < lines.length; i++){
+						var line_taxes = lines[i].taxes;
+						jsonStr += '{';
+						jsonStr += 		'"product_id":' + lines[i].product_id + ',';
+						jsonStr += 		'"notes": "' + lines[i].notes + '",';
+
+						if (invoice_type == 'N' || invoice_type == 'L')
+							jsonStr += 		'"quantity":' + lines[i].quantity + ',';
+						else{
+							if( invoice.invoice_type == "N")
+								jsonStr += 		'"quantity":' + lines[i].quantity + ',';
+							else
+								jsonStr += 		'"quantity":' + parseFloat(lines[i].quantity * -1)  + ',';
+						}
+
+						jsonStr +=		'"retail_price":' + lines[i].retail_price + ',';
+						jsonStr +=		'"original_price":' + lines[i].orig_price + ',';
+						if(lines[i].discount_text != null || lines[i].discount_text != "" || lines[i].discount_text != " "){
+								jsonStr +=		'"discount_text":"' + lines[i].discount_text + '",';
+								jsonStr +=		'"discount_amount":"' + parseFloat(lines[i].discount_amount).toFixed(decimal_places) + '",';
+						}
+						jsonStr += 		'"invoice_line_taxes": [';
+						if(lines[i].taxes != undefined){
+							for ( var j=0; j < line_taxes.length; j++){
+								jsonStr += 		'{';
+								if( line_taxes[j].tax_id != null )
+									jsonStr +=		'"tax_rate_id":' + line_taxes[j].tax_id  + ',';
+								jsonStr += 		'"rate":"' + line_taxes[j].tax_rate + '%",';
+
+								if (invoice_type == 'N' || invoice_type == 'L')
+									jsonStr +=		'"amount":' + line_taxes[j].tax_amount;
+								else{
+									if( invoice.invoice_type == "N")
+										jsonStr +=		'"amount":' + line_taxes[j].tax_amount;
+									else
+										jsonStr +=		'"amount":' + parseFloat(line_taxes[j].tax_amount * -1);
+								}
+
+								(j == (line_taxes.length - 1)) ? jsonStr +=  '}' : jsonStr +=  '},'
+							}
+						} else{
+							jsonStr += 		'{}';
+						}
+
+						jsonStr +=		']';
+
+						(i == (lines.length - 1)) ? jsonStr +=  '}' : jsonStr +=  '},'
+
+					}
+				jsonStr += 		'],';
+
+				var payments = invoice.payments;
+
+				var ctr = 1;
+				var hash_length = Object.keys(payments).length ;
+
+				jsonStr +=		'"payments": ';
+				jsonStr += JSON.stringify(payments)
+
+				jsonStr += 	'}';
+				jsonStr += '}';
+
+		} else {
+			var payments = invoice.payments;
+
+			jsonStr =		'{"invoice":';
+			jsonStr +=		'{';
+
+			jsonStr += 			'"payments":{';
+			jsonStr +=				'"'+sessionStorage.getItem("current_payment_type")+'": [';
+			jsonStr +=					'{ "amount":' + tendered + ', "tender": ' + tendered + '}';
+			jsonStr +=				']';
+			jsonStr += 			'}';
+			
+			jsonStr += 		'}';
+			jsonStr += 	'}';
+
+			/*
+	    jsonStr = '{"invoice":';
+			jsonStr += 	'{';
+			var payments = invoice.payments;
+
+			var ctr = 1;
+			var hash_length = Object.keys(payments).length ;
+
+			jsonStr +=		'"payments": [';
+			jsonStr += 			'{';
+			jsonStr += 				'"payment_type_id":' + sessionStorage.getItem("current_payment_type") + ',';
+			jsonStr +=				'"amount":' + tendered + ',';
+			jsonStr +=				'"tender":' + tendered + ',';
+
+			if (invoice_type == 'L')
+				jsonStr +=		'"is_deposit": ' + true;
+			else
+				jsonStr +=		'"is_deposit": ' + false;
+
+			jsonStr += 			'}';
+			jsonStr += 		']';
+			jsonStr += 	'}';
+			jsonStr += '}';
+			*/
+		}
+
+		return jsonStr;
+	}
+
+why do you have to build the jsonStr manually?
+the design of the api and client was not considered and this is an internal client!
+
+
+
+
